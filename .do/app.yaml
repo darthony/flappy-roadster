@@ -2,6 +2,10 @@
 # doctl apps create --spec .do/app.yaml   (o importa este archivo desde el panel)
 name: flappy-roadster
 region: nyc
+domains:
+  - domain: flappyroadster.simgulary.io
+    type: PRIMARY
+    zone: simgulary.io
 databases:
   - name: db
     engine: PG
@@ -11,7 +15,7 @@ services:
   - name: web
     environment_slug: node-js
     github:
-      repo: TU_USUARIO/flappy-roadster
+      repo: darthony/flappy-roadster
       branch: main
       deploy_on_push: true
     build_command: npm ci && npm run build
