@@ -50,10 +50,10 @@ async function createPostgresStore(url) {
   const ca = process.env.DATABASE_CA_CERT?.trim();
   const ssl = wantsSsl ? (ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false }) : undefined;
   const pool = new pg.Pool({ connectionString: u.toString(), ssl, max: 5 });
-  // En Postgres 15+ el usuario de una base gestionada puede no tener permiso de CREATE en `public`
-  // (es el caso de las bases de desarrollo de App Platform). Se usa un esquema propio, del que sí es dueño.
-  const schema = process.env.DATABASE_SCHEMA ?? 'flappy';
-  await pool.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
+  // Esquema configurable (DATABASE_SCHEMA). Las bases de desarrollo de App Platform solo permiten `public`,
+  // y conceden el permiso de CREATE al completarse un despliegue con éxito.
+  const schema = process.env.DATABASE_SCHEMA ?? 'public';
+  if (schema !== 'public') await pool.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
   const T = `${schema}.scores`;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ${T} (
