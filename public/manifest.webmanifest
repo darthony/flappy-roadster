@@ -1,0 +1,11 @@
+{
+  "name": "Flappy Roadster",
+  "short_name": "Roadster",
+  "description": "Tributo no oficial al Roadster con propulsores de nitrógeno.",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

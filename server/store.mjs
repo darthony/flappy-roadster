@@ -1,0 +1,67 @@
+// Almacén de puntuaciones: Postgres si hay DATABASE_URL (App Platform), SQLite local si no.
+import path from 'node:path';
+import fs from 'node:fs';
+
+export const TOP_N = 20;
+
+export async function createStore() {
+  if (process.env.DATABASE_URL) return createPostgresStore(process.env.DATABASE_URL);
+  return createSqliteStore(process.env.DATABASE_PATH ?? path.join(process.cwd(), 'data', 'scores.db'));
+}
+
+async function createPostgresStore(url) {
+  const { default: pg } = await import('pg');
+  // Las bases gestionadas de DigitalOcean exigen TLS; su certificado es propio.
+  const ssl = /sslmode=require|ondigitalocean\.com/.test(url) ? { rejectUnauthorized: false } : undefined;
+  const pool = new pg.Pool({ connectionString: url, ssl, max: 5 });
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS scores (
+      id BIGSERIAL PRIMARY KEY,
+      nickname TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_scores_score ON scores (score DESC, created_at ASC)');
+  return {
+    kind: 'postgres',
+    label: url.replace(/\/\/[^@]*@/, '//***@'),
+    async top() {
+      const { rows } = await pool.query(`SELECT nickname, score, created_at FROM scores ORDER BY score DESC, created_at ASC LIMIT ${TOP_N}`);
+      return rows;
+    },
+    async rank(score) {
+      const { rows } = await pool.query('SELECT COUNT(*)::int + 1 AS rank FROM scores WHERE score > $1', [score]);
+      return rows[0].rank;
+    },
+    async insert(nickname, score) {
+      await pool.query('INSERT INTO scores (nickname, score) VALUES ($1, $2)', [nickname, score]);
+    },
+    async close() { await pool.end(); },
+  };
+}
+
+async function createSqliteStore(file) {
+  const { DatabaseSync } = await import('node:sqlite');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const db = new DatabaseSync(file);
+  db.exec(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nickname TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_scores_score ON scores (score DESC, created_at ASC);
+  `);
+  // Sentencias preparadas por llamada: en Node 22 una sentencia preparada al arrancar
+  // puede quedar finalizada cuando el recolector libera la referencia a la base.
+  return {
+    kind: 'sqlite',
+    label: file,
+    async top() { return db.prepare(`SELECT nickname, score, created_at FROM scores ORDER BY score DESC, created_at ASC LIMIT ${TOP_N}`).all(); },
+    async rank(score) { return db.prepare('SELECT COUNT(*) + 1 AS rank FROM scores WHERE score > ?').get(score).rank; },
+    async insert(nickname, score) { db.prepare('INSERT INTO scores (nickname, score) VALUES (?, ?)').run(nickname, score); },
+    async close() { db.close(); },
+  };
+}

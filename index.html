@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0f14" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" />
+    <title>Flappy Roadster</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="hud">
+      <div id="score">0</div>
+      <div id="mult"></div>
+      <div id="speed"><span id="speed-val">0</span><small> mph</small></div>
+      <div id="nitro-ready" hidden><span class="ready-title">¡NITRO LISTO!</span><span class="ready-hint" id="ready-hint">Pulsa N</span></div>
+      <div id="nitro" title="Nitrógeno">
+        <div id="nitro-fill"></div>
+        <span id="nitro-label">N₂</span>
+      </div>
+      <button id="nitro-btn" aria-label="Disparar nitro">N₂</button>
+      <div id="overlay">
+        <div class="card" id="card">
+          <div id="card-title">
+            <p class="eyebrow">Tributo no oficial</p>
+            <h1>FLAPPY<br />ROADSTER</h1>
+            <p class="sub">0–60 mph en 0.59 s · 10 propulsores de nitrógeno</p>
+            <ul class="hint">
+              <li><b>Toca</b> o <b>Espacio</b>: ráfaga de nitrógeno</li>
+              <li><b>Desliza</b> o <b>R</b>: barrel roll (x2 al pasar)</li>
+              <li><b>Mantén</b>, <b>N</b> o botón N₂: nitro a tope (x10)</li>
+            </ul>
+            <p class="best">Mejor: <span id="best">0</span></p>
+            <button id="start-btn">JUGAR</button>
+            <button id="board-btn" class="ghost">RANKING</button>
+            <div id="board-title-wrap" hidden><h2>Top 20</h2><ol id="board-title" class="board"></ol></div>
+            <p class="credit">Modelo 3D: <a href="https://sketchfab.com/3d-models/tesla-roadster-2020-1fbf29e297bd4a17ac39a00a378441d8" target="_blank" rel="noopener">Tesla Roadster 2020</a> de metarex.4d, CC-BY-4.0</p>
+          </div>
+          <div id="card-over" hidden>
+            <p class="eyebrow">Aterrizaje fallido</p>
+            <h1 id="final-score">0</h1>
+            <p class="sub" id="over-sub">Nuevo récord</p>
+            <p class="best">Mejor: <span id="best2">0</span></p>
+            <form id="score-form" autocomplete="off">
+              <input id="nick" type="text" maxlength="16" minlength="2" placeholder="Tu nickname" required />
+              <button type="submit" id="submit-btn">GUARDAR</button>
+            </form>
+            <p id="submit-msg" class="sub"></p>
+            <h2>Top 20</h2>
+            <ol id="board-over" class="board"></ol>
+            <button id="retry-btn">OTRA VEZ</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
