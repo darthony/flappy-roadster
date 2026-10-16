@@ -56,6 +56,14 @@ App Platform inyecta `DATABASE_URL` en el servicio y el ranking persiste entre d
 3. El build ejecuta `npm ci --include=dev && npm run build` (App Platform fija NODE_ENV=production) y el servicio arranca con `npm start` en el puerto 8080.
 4. Cuando tengas la URL definitiva, actualiza la URL del flujo web en Google Analytics.
 
+App desplegada: https://flappyroadster.simgulary.io (ingreso por defecto https://flappy-roadster-4msdd.ondigitalocean.app).
+
+**Nota sobre la base de desarrollo:** App Platform concede al usuario de la base el permiso de CREATE sobre `public`
+solo cuando un despliegue termina con éxito. Si el primer despliegue falla, la base queda sin permisos
+("permission denied for schema public"). Solución oficial: desplegar una vez sin la sección `databases`, volver a
+añadirla y desplegar de nuevo. El servidor no se cae si Postgres falla: avisa y usa SQLite mientras tanto.
+Con `DEBUG_DB=1` expone `/api/dbinfo` con el diagnóstico de permisos.
+
 ## Estructura
 
 - `src/roadster.ts` — coche: carga `public/models/roadster.glb` (y mientras tanto muestra un modelo procedural), añade las 10 toberas.
