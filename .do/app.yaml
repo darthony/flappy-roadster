@@ -34,6 +34,9 @@ services:
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
         value: ${db.CA_CERT}
+      - key: DEBUG_DB
+        scope: RUN_TIME
+        value: "1"
       - key: VITE_GA_ID
         scope: BUILD_TIME
         value: G-WGVSJK662E

@@ -1,7 +1,7 @@
 // Servidor de Flappy Roadster: sirve el juego compilado y la API de puntuaciones.
 import express from 'express';
 import path from 'node:path';
-import { createStore, TOP_N } from './store.mjs';
+import { createStore, diagnosePostgres, TOP_N } from './store.mjs';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DIST = path.join(process.cwd(), 'dist');
@@ -30,6 +30,13 @@ app.set('trust proxy', true);
 app.use(express.json({ limit: '2kb' }));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, store: store.kind }));
+
+if (process.env.DEBUG_DB === '1' && process.env.DATABASE_URL) {
+  app.get('/api/dbinfo', async (_req, res) => {
+    try { res.json(await diagnosePostgres(process.env.DATABASE_URL)); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
+}
 
 app.get('/api/scores', async (_req, res, next) => {
   try {

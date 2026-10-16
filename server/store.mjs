@@ -5,8 +5,39 @@ import fs from 'node:fs';
 export const TOP_N = 20;
 
 export async function createStore() {
-  if (process.env.DATABASE_URL) return createPostgresStore(process.env.DATABASE_URL);
+  if (process.env.DATABASE_URL) {
+    try {
+      return await createPostgresStore(process.env.DATABASE_URL);
+    } catch (e) {
+      console.error('Postgres no disponible, se usa SQLite temporal:', e.message);
+      lastPgError = e;
+    }
+  }
   return createSqliteStore(process.env.DATABASE_PATH ?? path.join(process.cwd(), 'data', 'scores.db'));
+}
+
+let lastPgError = null;
+
+/** Diagnóstico de permisos de la base (solo si DEBUG_DB=1). */
+export async function diagnosePostgres(url) {
+  const { default: pg } = await import('pg');
+  const u = new URL(url); u.searchParams.delete('sslmode');
+  const ca = process.env.DATABASE_CA_CERT?.trim();
+  const client = new pg.Client({ connectionString: u.toString(), ssl: ca ? { ca } : { rejectUnauthorized: false } });
+  await client.connect();
+  const q = async (sql) => (await client.query(sql)).rows;
+  const info = {
+    lastError: lastPgError?.message ?? null,
+    who: await q('SELECT current_user, current_database(), version()'),
+    role: await q('SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolinherit FROM pg_roles WHERE rolname = current_user'),
+    memberOf: await q('SELECT r.rolname FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid WHERE m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)'),
+    dbPriv: await q("SELECT has_database_privilege(current_database(), 'CREATE') AS create_db, has_database_privilege(current_database(), 'TEMP') AS temp"),
+    schemas: await q("SELECT n.nspname, r.rolname AS owner, has_schema_privilege(n.nspname, 'CREATE') AS can_create, has_schema_privilege(n.nspname, 'USAGE') AS can_use FROM pg_namespace n JOIN pg_roles r ON r.oid = n.nspowner WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema'"),
+    dbOwner: await q('SELECT d.datname, r.rolname AS owner FROM pg_database d JOIN pg_roles r ON r.oid = d.datdba WHERE d.datname = current_database()'),
+    tables: await q("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema') LIMIT 20"),
+  };
+  await client.end();
+  return info;
 }
 
 async function createPostgresStore(url) {
