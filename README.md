@@ -53,7 +53,7 @@ App Platform inyecta `DATABASE_URL` en el servicio y el ranking persiste entre d
 
 1. Sube el repositorio a GitHub y edita `repo` en `.do/app.yaml`.
 2. `doctl apps create --spec .do/app.yaml` (o Create App → importar spec desde el panel).
-3. El build ejecuta `npm ci && npm run build` y el servicio arranca con `npm start` en el puerto 8080.
+3. El build ejecuta `npm ci --include=dev && npm run build` (App Platform fija NODE_ENV=production) y el servicio arranca con `npm start` en el puerto 8080.
 4. Cuando tengas la URL definitiva, actualiza la URL del flujo web en Google Analytics.
 
 ## Estructura
