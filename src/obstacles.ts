@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { glowSprite, headlightCone, lightPool } from './glow';
 
 /**
  * Obstáculos: la fila de vehículos que el Roadster saltó en la demo
@@ -28,8 +29,9 @@ const HEADLAMP = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf
 const TAILLAMP = new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff1010, emissiveIntensity: 2 });
 
 let vehicleSpots = true;
+let fakeLights = false;
 /** Desactiva los focos reales de cada vehículo (perfil móvil); los faros emisivos se mantienen. */
-export function configureObstacles(opts: { spots: boolean }): void { vehicleSpots = opts.spots; }
+export function configureObstacles(opts: { spots: boolean; fakes?: boolean }): void { vehicleSpots = opts.spots; fakeLights = !!opts.fakes; }
 
 /** Faros delanteros (hacia +X, que tras girar el grupo apuntan a la cámara) y pilotos traseros. */
 function addLights(g: THREE.Group, front: number, back: number, width: number, y: number, bar = false): void {
@@ -39,6 +41,23 @@ function addLights(g: THREE.Group, front: number, back: number, width: number, y
     for (const z of [width / 2 - 0.35, -(width / 2 - 0.35)]) g.add(shaded(new THREE.BoxGeometry(0.08, 0.14, 0.4), HEADLAMP, front + 0.02, y, z));
   }
   g.add(shaded(new THREE.BoxGeometry(0.06, 0.08, width * 0.85), TAILLAMP, back - 0.02, y, 0));
+  if (fakeLights) {
+    const zs = bar ? [0] : [width / 2 - 0.35, -(width / 2 - 0.35)];
+    for (const z of zs) {
+      const halo = glowSprite(0xffffff, bar ? 2.4 : 1.6, 0.95);
+      halo.position.set(front + 0.1, y, z);
+      g.add(halo);
+    }
+    const beam = headlightCone(8, bar ? 4.2 : 3.2, 0.2);
+    beam.position.x += front;
+    g.add(beam);
+    const pool = lightPool(0xdfe9ff, 6, 0.22);
+    pool.position.set(front + 2.5, 0.015, 0);
+    g.add(pool);
+    const tail = glowSprite(0xff2020, 1.6, 0.7);
+    tail.position.set(back - 0.1, y, 0);
+    g.add(tail);
+  }
   if (!vehicleSpots) return;
   const spot = new THREE.SpotLight(0xdfe9ff, 12, 20, 0.5, 0.7, 1.5);
   spot.position.set(front, y, 0);
@@ -229,6 +248,7 @@ export class ObstacleField {
     for (const x of [-0.9, 0, 0.9]) lip.add(shaded(stripeGeo, WARNING, x, 0, 0));
     lip.add(shaded(lampGeo, LAMP, 0, -0.26, 1.5));
     lip.add(shaded(new THREE.BoxGeometry(2.6, 0.05, 0.08), NEON_LIP, 0, -0.27, -1.6));
+    if (fakeLights) { const g = glowSprite(0xfff2c0, 3.2, 0.7); g.position.set(0, -0.3, 1.5); lip.add(g); }
     group.add(lip);
 
     group.position.x = this.spawnX;

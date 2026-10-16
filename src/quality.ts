@@ -14,6 +14,10 @@ export interface Quality {
   haze: boolean;
   /** Sustituye materiales físicos del modelo por estándar (shaders más simples). */
   simpleMaterials: boolean;
+  /** Halos, conos de faro y sombra difusa pintados, en lugar de bloom, focos y sombras reales. */
+  fakes: boolean;
+  /** Si el dispositivo rinde, activar bloom a baja resolución tras medir fps. */
+  adaptiveBloom: boolean;
 }
 
 export function detectQuality(): Quality {
@@ -33,5 +37,7 @@ export function detectQuality(): Quality {
     particles: low ? 500 : 1000,
     haze: !low,
     simpleMaterials: low || q.has('simple'),
+    fakes: low || q.has('fakes'),
+    adaptiveBloom: low && !q.has('nobloom'),
   };
 }

@@ -11,6 +11,7 @@ import { initAnalytics, track } from './analytics';
 import { detectQuality } from './quality';
 import { installErrorReporting, report } from './report';
 import { configureObstacles, buildWarmup } from './obstacles';
+import { blobShadow, glowSprite } from './glow';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -43,6 +44,11 @@ function saveBest(n: number): void { try { localStorage.setItem(BEST_KEY, String
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
+  private shadow?: THREE.Mesh;
+  private adaptiveBloom = false;
+  private fpsSamples: number[] = [];
+  private fpsAcc = 0;
+  private fpsFrames = 0;
   private composer?: EffectComposer;
   private bloom?: UnrealBloomPass;
   private scene = new THREE.Scene();
@@ -110,7 +116,9 @@ export class Game {
     } finally {
       this.scene.remove(warm);
       this.hud.setLoading(null);
-      track('warmup_done', { ms: Math.round(performance.now() - t0) });
+      const ms = Math.round(performance.now() - t0);
+      track('warmup_done', { ms });
+      if (ms > 1500) report({ kind: 'perf', message: `warmup ${ms} ms`, extra: { ms } });
     }
   }
 
@@ -140,13 +148,21 @@ export class Game {
     this.scene.environment = buildNightEnvironment(this.renderer);
     this.scene.environmentIntensity = 1.0;
 
-    configureObstacles({ spots: q.vehicleSpots });
+    configureObstacles({ spots: q.vehicleSpots, fakes: q.fakes });
     this.world = new World(this.scene, q);
     this.field = new ObstacleField(this.scene);
     this.plume = new NitrogenPlume(q.particles);
     this.car = buildRoadster();
     this.car.group.position.set(0, this.y, 0);
     this.scene.add(this.car.group, this.plume.points, this.debris.mesh);
+    if (q.fakes) {
+      this.shadow = blobShadow(CAR_LENGTH * 1.3, 3.2);
+      this.scene.add(this.shadow);
+      const tail = glowSprite(0xff2020, 2.2, 0.8);
+      tail.position.set(-2.4, 0.86, 0);
+      this.car.body.add(tail);
+    }
+    this.adaptiveBloom = q.adaptiveBloom;
     this.world.moon.target = this.car.group;
     // Precompila shaders de todos los obstáculos y del coche antes de jugar: en móvil la
     // compilación en el primer frame bloquea el hilo principal varios segundos.
@@ -193,7 +209,7 @@ export class Game {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.composer?.setSize(w, h);
-    this.bloom?.setSize(Math.round(w / 2), Math.round(h / 2));
+    this.bloom?.setSize(Math.round(w / (this.adaptiveBloom || this.fpsSamples.length ? 4 : 2)), Math.round(h / (this.adaptiveBloom || this.fpsSamples.length ? 4 : 2)));
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -390,6 +406,14 @@ export class Game {
     this.debris.update(dt, this.speed);
     for (const w of this.car.wheels) w.rotation.z -= (worldSpeed / 0.4) * dt;
     for (const w of this.car.modelWheels) w.node.rotateOnAxis(w.axis, -(worldSpeed / 0.35) * dt);
+    if (this.shadow) {
+      // La sombra difusa se encoge y se aclara con la altura.
+      const h = THREE.MathUtils.clamp(this.y / 8, 0, 1);
+      this.shadow.position.x = this.car.group.position.x;
+      this.shadow.scale.setScalar(1 - h * 0.45);
+      (this.shadow.material as THREE.MeshBasicMaterial).opacity = 0.75 * (1 - h * 0.7);
+    }
+    this.sampleFps(dt);
     this.updateCamera(dt);
     this.hud.update(dt);
     this.hud.setSpeed(worldSpeed * 8);
@@ -516,6 +540,29 @@ export class Game {
       this.hud.showGameOver(this.score, this.best, this.score > 0 && this.score >= this.best);
       this.hud.setSubmitState(this.score > 0 ? 'idle' : 'hidden', this.score > 0 ? '' : '');
       this.loadBoard('over');
+    }
+  }
+
+  /** Mide fps durante la partida; si el móvil va sobrado, activa bloom a un cuarto de resolución. */
+  private sampleFps(dt: number): void {
+    if (!this.adaptiveBloom || this.state !== 'playing') return;
+    this.fpsAcc += dt; this.fpsFrames++;
+    if (this.fpsAcc < 1) return;
+    this.fpsSamples.push(this.fpsFrames / this.fpsAcc);
+    this.fpsAcc = 0; this.fpsFrames = 0;
+    if (this.fpsSamples.length < 4) return;
+    this.adaptiveBloom = false;
+    const avg = this.fpsSamples.reduce((a, b) => a + b, 0) / this.fpsSamples.length;
+    track('mobile_fps', { fps: Math.round(avg) });
+    report({ kind: 'perf', message: `${Math.round(avg)} fps en perfil low`, extra: { fps: Math.round(avg), samples: this.fpsSamples.map(Math.round) } });
+    if (avg >= 52) {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.5, 0.9);
+      this.composer.addPass(this.bloom);
+      this.composer.addPass(new OutputPass());
+      this.resize();
+      console.info(`[quality] bloom ligero activado (${Math.round(avg)} fps)`);
     }
   }
 

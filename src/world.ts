@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { NitrogenPlume } from './particles';
 import type { Quality } from './quality';
+import { glowSprite, glowStrip } from './glow';
 
 /** Mapa de rugosidad con charcos: zonas lisas (mojadas) sobre asfalto. */
 function puddleRoughness(size = 256): THREE.Texture {
@@ -87,7 +88,7 @@ export class World {
 
     // Lavado rojo del neón: luces fijas respecto a la cámara (la pista se desplaza bajo ellas).
     for (let i = 0; i < q.neonLights; i++) {
-      const l = new THREE.PointLight(0xff2020, q.neonLights < 6 ? 9 : 5, q.neonLights < 6 ? 18 : 13, 2);
+      const l = new THREE.PointLight(0xff2020, q.neonLights < 6 ? 6 : 5, q.neonLights < 6 ? 16 : 13, 2);
       l.position.set(q.neonLights < 6 ? -2 + i * 10 : -8 + i * 7, 0.7, i % 2 === 0 ? 4.4 : -4.4);
       scene.add(l);
     }
@@ -128,6 +129,17 @@ export class World {
       this.group.add(strip);
     }
 
+    if (q.fakes) {
+      // Halo del neón a lo largo de la pista y lavado rojo sobre el asfalto.
+      for (const z of [-4.45, 4.45]) {
+        const halo = glowStrip(0xff2020, 400, 1.2, 0.32);
+        halo.position.set(60, 0.02, z);
+        this.group.add(halo);
+      }
+      const wash = glowStrip(0x6a0e0e, 400, 11, 0.16);
+      wash.position.set(60, 0.012, 0);
+      this.group.add(wash);
+    }
     const dashMat = new THREE.MeshStandardMaterial({ color: 0x7c828d, emissive: 0x2a2d33, emissiveIntensity: 0.3, roughness: 0.6 });
     const dashGeo = new THREE.PlaneGeometry(2.2, 0.16);
     for (let i = 0; i < 40; i++) {
@@ -168,6 +180,7 @@ export class World {
       const head = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.6, 0.5), lampMat);
       head.position.y = 16;
       tower.add(pole, head);
+      if (q.fakes) { const g = glowSprite(0xffffff, 4.5, 0.7); g.position.y = 16; tower.add(g); }
       tower.position.set(i * 34 + 6, 0, i % 2 === 0 ? -22 : 24);
       this.group.add(tower);
       this.far.push({ mesh: tower, speed: 0.4, span: 170 });
@@ -179,6 +192,7 @@ export class World {
       const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), beaconMat);
       beacon.position.y = 18.3;
       stand.add(t, beacon);
+      if (q.fakes) { const g = glowSprite(0xff2020, 2.5, 0.9); g.position.y = 18.3; stand.add(g); }
       stand.position.set(i * 55 + 10, 0, -48);
       this.group.add(stand);
       this.far.push({ mesh: stand, speed: 0.15, span });
