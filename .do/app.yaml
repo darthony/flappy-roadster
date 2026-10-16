@@ -34,6 +34,10 @@ services:
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
         value: ${db.CA_CERT}
+      - key: ADMIN_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: EV[1:meZjONvktnSTRdg0D7HyFjwAixoWCR2W:wEi0STfgd9Y36o4CE4kOv1PKd/rYrS4uyh6ePD/X/1uSg42hl9WHq5jqRqx9jip5NM/UKYcDJJCtPKJwKxttVg==]
       - key: VITE_GA_ID
         scope: BUILD_TIME
         value: G-WGVSJK662E
