@@ -11,9 +11,14 @@ export async function createStore() {
 
 async function createPostgresStore(url) {
   const { default: pg } = await import('pg');
-  // Las bases gestionadas de DigitalOcean exigen TLS; su certificado es propio.
-  const ssl = /sslmode=require|ondigitalocean\.com/.test(url) ? { rejectUnauthorized: false } : undefined;
-  const pool = new pg.Pool({ connectionString: url, ssl, max: 5 });
+  // Las bases gestionadas de DigitalOcean exigen TLS con una CA propia. Se quita `sslmode` de la URL
+  // (el driver lo interpretaría como verify-full) y se pasa la CA que App Platform inyecta en DATABASE_CA_CERT.
+  const u = new URL(url);
+  const wantsSsl = u.searchParams.get('sslmode') !== 'disable' && (u.searchParams.has('sslmode') || /ondigitalocean\.com/.test(u.hostname));
+  u.searchParams.delete('sslmode');
+  const ca = process.env.DATABASE_CA_CERT?.trim();
+  const ssl = wantsSsl ? (ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false }) : undefined;
+  const pool = new pg.Pool({ connectionString: u.toString(), ssl, max: 5 });
   await pool.query(`
     CREATE TABLE IF NOT EXISTS scores (
       id BIGSERIAL PRIMARY KEY,
