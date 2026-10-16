@@ -13,6 +13,9 @@ export class Hud {
   private nitroFill = $('nitro-fill');
   private nitroBtn = $<HTMLButtonElement>('nitro-btn');
   private nitroReady = $('nitro-ready');
+  private thrustBtn = $<HTMLButtonElement>('thrust-btn');
+  private thrustTaps = 0;
+  private readonly touch = matchMedia('(pointer: coarse)').matches;
   private overlay = $('overlay');
   private cardTitle = $('card-title');
   private cardOver = $('card-over');
@@ -37,7 +40,26 @@ export class Hud {
     $('board-btn').addEventListener('click', () => { this.boardTitleWrap.hidden = !this.boardTitleWrap.hidden; if (!this.boardTitleWrap.hidden) this.boardCb?.(); });
     this.form.addEventListener('submit', (e) => { e.preventDefault(); const n = this.nick.value.trim(); if (n.length >= 2) this.submitCb?.(n); });
     try { this.nick.value = localStorage.getItem(NICK_KEY) ?? ''; } catch { /* sin almacenamiento */ }
-    const touch = matchMedia('(pointer: coarse)').matches;
+    // Teclado en pantalla: cuando el viewport visual se encoge, el overlay se ajusta a él y la tarjeta sube.
+    const vv = window.visualViewport;
+    const onViewport = () => {
+      const h = vv ? vv.height : innerHeight;
+      const keyboard = h < innerHeight * 0.8;
+      this.overlay.classList.toggle('kb', keyboard);
+      this.overlay.style.height = keyboard ? `${h}px` : '';
+      this.overlay.style.top = keyboard && vv ? `${vv.offsetTop}px` : '';
+      if (keyboard && document.activeElement === this.nick) this.nick.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    };
+    vv?.addEventListener('resize', onViewport);
+    vv?.addEventListener('scroll', onViewport);
+    this.nick.addEventListener('focus', () => setTimeout(onViewport, 300));
+    this.nick.addEventListener('blur', () => setTimeout(onViewport, 100));
+    const touch = this.touch;
+    this.thrustBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      this.flapCb?.();
+      if (++this.thrustTaps >= 3) this.thrustBtn.classList.add('quiet');
+    });
     $('ready-hint').innerHTML = touch ? 'Mantén pulsado o toca <b>N₂</b>' : 'Pulsa <b>N</b> o mantén el clic';
   }
 
@@ -45,11 +67,13 @@ export class Hud {
   private retryCb?: () => void;
   private nitroCb?: () => void;
   private submitCb?: (nick: string) => void;
+  private flapCb?: () => void;
   private boardCb?: () => void;
   onStart(cb: () => void): void { this.startCb = cb; }
   onRetry(cb: () => void): void { this.retryCb = cb; }
   onNitro(cb: () => void): void { this.nitroCb = cb; }
   onSubmit(cb: (nick: string) => void): void { this.submitCb = cb; }
+  onThrust(cb: () => void): void { this.flapCb = cb; }
   onBoardRequest(cb: () => void): void { this.boardCb = cb; }
 
   /** Pinta un ranking; resalta la fila del jugador si coincide nickname y puntuación. */
@@ -84,6 +108,13 @@ export class Hud {
   }
 
   rememberNick(n: string): void { try { localStorage.setItem(NICK_KEY, n); } catch { /* sin almacenamiento */ } }
+
+  /** Estado de carga en la pantalla de título: desactiva JUGAR mientras se preparan shaders y modelo. */
+  setLoading(text: string | null): void {
+    const btn = $<HTMLButtonElement>('start-btn');
+    btn.disabled = text !== null;
+    btn.textContent = text ?? 'JUGAR';
+  }
 
   setScore(n: number): void {
     if (n === this.lastScore) return;
@@ -128,6 +159,7 @@ export class Hud {
     this.overlay.hidden = false;
     this.nitroBtn.hidden = true;
     this.nitroReady.hidden = true;
+    this.thrustBtn.hidden = true;
   }
 
   showGameOver(score: number, best: number, record: boolean): void {
@@ -139,11 +171,15 @@ export class Hud {
     this.overlay.hidden = false;
     this.nitroBtn.hidden = true;
     this.nitroReady.hidden = true;
+    this.thrustBtn.hidden = true;
   }
 
   hideOverlay(): void {
     this.overlay.hidden = true;
     this.nitroReady.hidden = true;
+    this.thrustBtn.hidden = !this.touch;
+    this.thrustTaps = 0;
+    this.thrustBtn.classList.remove('quiet');
     this.nitroBtn.hidden = false;
     this.mult.classList.remove('show', 'nitro');
   }

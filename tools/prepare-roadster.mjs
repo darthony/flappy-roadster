@@ -44,7 +44,7 @@ await doc.transform(
   dedup(),
   prune(),
   weld(),
-  simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.0012, lockBorder: true }),
+  simplify({ simplifier: MeshoptSimplifier, ratio, error: Number(process.env.SIMPLIFY_ERROR ?? 0.0012), lockBorder: !process.env.NO_LOCK }),
   resample(),
   textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [1024, 1024], quality: 82 }),
   quantize(),
@@ -54,5 +54,5 @@ await doc.transform(
 
 let tris = 0;
 for (const mesh of doc.getRoot().listMeshes()) for (const p of mesh.listPrimitives()) tris += (p.getIndices()?.getCount() ?? 0) / 3;
-await io.write('public/models/roadster.glb', doc);
+await io.write(process.env.OUT ?? 'public/models/roadster.glb', doc);
 console.log(`triángulos: ${Math.round(tris)}`);

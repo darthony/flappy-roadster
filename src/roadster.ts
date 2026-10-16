@@ -170,8 +170,10 @@ loader.setMeshoptDecoder(MeshoptDecoder);
  * Carga el modelo glTF (Tesla Roadster 2020 de metarex.4d, CC-BY-4.0, repintado en Ano White),
  * lo normaliza a CAR_LENGTH con el morro hacia +X y el suelo en y=0, y sustituye la carrocería procedural.
  */
-export async function loadRoadsterModel(car: Roadster, url = '/models/roadster.glb'): Promise<void> {
-  const gltf = await loader.loadAsync(url);
+export interface LoadOptions { url?: string; simpleMaterials?: boolean }
+
+export async function loadRoadsterModel(car: Roadster, opts: LoadOptions = {}): Promise<void> {
+  const gltf = await loader.loadAsync(opts.url ?? '/models/roadster.glb');
   const model = gltf.scene;
   model.updateMatrixWorld(true);
 
@@ -188,6 +190,7 @@ export async function loadRoadsterModel(car: Roadster, url = '/models/roadster.g
     if (!m.isMesh) return;
     m.castShadow = true;
     m.receiveShadow = false;
+    if (opts.simpleMaterials) m.material = simplify(m.material as THREE.Material);
     const mat = m.material as THREE.MeshStandardMaterial;
     if (mat?.name?.startsWith('headlights')) {
       tmpBox.setFromObject(m);
@@ -221,4 +224,27 @@ export async function loadRoadsterModel(car: Roadster, url = '/models/roadster.g
   car.body.add(wrap);
   car.modelWheels = modelWheels;
   car.wheels.length = 0;
+}
+
+const simplified = new WeakMap<THREE.Material, THREE.Material>();
+/** MeshPhysical → MeshStandard (sin clearcoat ni especular): shaders mucho más ligeros para GPUs móviles. */
+function simplify(mat: THREE.Material): THREE.Material {
+  const cached = simplified.get(mat);
+  if (cached) return cached;
+  let out = mat;
+  if ((mat as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial) {
+    const p = mat as THREE.MeshPhysicalMaterial;
+    const m = new THREE.MeshStandardMaterial({
+      name: p.name, color: p.color, map: p.map, metalness: p.metalness, roughness: p.roughness,
+      emissive: p.emissive, emissiveIntensity: p.emissiveIntensity, emissiveMap: p.emissiveMap,
+      transparent: p.transparent, opacity: p.opacity, side: THREE.FrontSide, alphaTest: p.alphaTest,
+    });
+    out = m;
+  } else if ((mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+    const m = (mat as THREE.MeshStandardMaterial).clone();
+    m.normalMap = null; m.side = THREE.FrontSide;
+    out = m;
+  }
+  simplified.set(mat, out);
+  return out;
 }

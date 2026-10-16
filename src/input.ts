@@ -19,7 +19,7 @@ export class Input {
 
   constructor(target: HTMLElement) {
     target.addEventListener('pointerdown', (e) => {
-      if ((e.target as HTMLElement).closest('.card, #nitro-btn')) return;
+      if ((e.target as HTMLElement).closest('.card, #nitro-btn, #thrust-btn')) return;
       e.preventDefault();
       this.pointerDown = true;
       this.swiped = false;

@@ -27,6 +27,10 @@ const LAMP = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c
 const HEADLAMP = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf4f8ff, emissiveIntensity: 3.5 });
 const TAILLAMP = new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff1010, emissiveIntensity: 2 });
 
+let vehicleSpots = true;
+/** Desactiva los focos reales de cada vehículo (perfil móvil); los faros emisivos se mantienen. */
+export function configureObstacles(opts: { spots: boolean }): void { vehicleSpots = opts.spots; }
+
 /** Faros delanteros (hacia +X, que tras girar el grupo apuntan a la cámara) y pilotos traseros. */
 function addLights(g: THREE.Group, front: number, back: number, width: number, y: number, bar = false): void {
   if (bar) {
@@ -35,6 +39,7 @@ function addLights(g: THREE.Group, front: number, back: number, width: number, y
     for (const z of [width / 2 - 0.35, -(width / 2 - 0.35)]) g.add(shaded(new THREE.BoxGeometry(0.08, 0.14, 0.4), HEADLAMP, front + 0.02, y, z));
   }
   g.add(shaded(new THREE.BoxGeometry(0.06, 0.08, width * 0.85), TAILLAMP, back - 0.02, y, 0));
+  if (!vehicleSpots) return;
   const spot = new THREE.SpotLight(0xdfe9ff, 12, 20, 0.5, 0.7, 1.5);
   spot.position.set(front, y, 0);
   spot.target.position.set(front + 12, -1.5, 0);
@@ -159,6 +164,30 @@ export interface Obstacle {
   passed: boolean;
   destroyed: boolean;
   columnRetract: number;
+}
+
+/**
+ * Grupo con un ejemplar de cada vehículo y un labio de rampa, para precompilar
+ * todos los shaders al arrancar (evita el tirón al aparecer cada tipo por primera vez).
+ */
+export function buildWarmup(): THREE.Group {
+  const g = new THREE.Group();
+  VEHICLES.forEach((k, i) => {
+    const v = k.build();
+    v.rotation.y = -Math.PI / 2;
+    v.position.x = i * 6;
+    g.add(v);
+  });
+  const column = new THREE.Mesh(columnGeo, STEEL);
+  column.position.set(0, 30, 0);
+  const lip = new THREE.Group();
+  lip.add(shaded(lipGeo, STEEL));
+  lip.add(shaded(stripeGeo, WARNING, 0, 0, 0));
+  lip.add(shaded(lampGeo, LAMP, 0, -0.26, 1.5));
+  lip.add(shaded(new THREE.BoxGeometry(2.6, 0.05, 0.08), NEON_LIP, 0, -0.27, -1.6));
+  lip.position.y = 8;
+  g.add(column, lip);
+  return g;
 }
 
 export class ObstacleField {

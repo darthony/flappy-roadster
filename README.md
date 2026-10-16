@@ -64,6 +64,18 @@ solo cuando un despliegue termina con éxito. Si el primer despliegue falla, la 
 añadirla y desplegar de nuevo. El servidor no se cae si Postgres falla: avisa y usa SQLite mientras tanto.
 Con `DEBUG_DB=1` expone `/api/dbinfo` con el diagnóstico de permisos.
 
+## Errores y rendimiento en móvil
+
+- `src/report.ts` captura excepciones, promesas rechazadas, pérdida del contexto WebGL y errores de shader de Three,
+  y los envía a `POST /api/client-errors` (quedan en los logs del servicio, `doctl apps logs <app> web --type run`)
+  y a Analytics como evento `exception`. Los últimos 200 se consultan en `GET /api/client-errors?key=ADMIN_KEY`.
+- `src/quality.ts` elige perfil `low` en móvil: sin sombras ni bloom, menos luces, DPR máximo 1,5, modelo ligero
+  (`roadster-lite.glb`, 74 k triángulos) y materiales simplificados. Se fuerza con `?quality=high|low`.
+- Al arrancar se precompilan los shaders de todos los obstáculos y del coche (`renderer.compileAsync`); hasta entonces el
+  botón JUGAR muestra el progreso. Sin esto, en GPUs móviles el primer frame bloqueaba el hilo principal varios segundos.
+- En móvil aparece un botón de impulso abajo al centro (la pantalla completa sigue respondiendo al toque) y la tarjeta de
+  nickname se recoloca sobre el teclado usando `visualViewport`.
+
 ## Estructura
 
 - `src/roadster.ts` — coche: carga `public/models/roadster.glb` (y mientras tanto muestra un modelo procedural), añade las 10 toberas.

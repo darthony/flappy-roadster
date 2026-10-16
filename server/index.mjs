@@ -58,6 +58,30 @@ app.post('/api/scores', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Errores del cliente: se registran en la salida estándar (visibles con `doctl apps logs`) y se guardan
+// los últimos 200 en memoria. GET /api/client-errors?key=ADMIN_KEY los devuelve.
+const clientErrors = [];
+app.post('/api/client-errors', express.text({ type: '*/*', limit: '8kb' }), (req, res) => {
+  if (rateLimited(req.ip + ':err')) return res.status(429).end();
+  let data;
+  try { data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body; } catch { return res.status(400).end(); }
+  const entry = {
+    at: new Date().toISOString(), ip: req.ip,
+    kind: String(data.kind ?? '').slice(0, 30), message: String(data.message ?? '').slice(0, 1000),
+    stack: String(data.stack ?? '').slice(0, 2000), url: String(data.url ?? '').slice(0, 300),
+    ua: String(data.ua ?? '').slice(0, 300), viewport: String(data.viewport ?? '').slice(0, 40), extra: data.extra ?? null,
+  };
+  clientErrors.push(entry);
+  if (clientErrors.length > 200) clientErrors.shift();
+  console.error(`[client-error] ${entry.kind}: ${entry.message} | ${entry.ua} | ${entry.viewport}`);
+  res.status(204).end();
+});
+app.get('/api/client-errors', (req, res) => {
+  if (!process.env.ADMIN_KEY || req.query.key !== process.env.ADMIN_KEY) return res.status(404).end();
+  res.set('Cache-Control', 'no-store');
+  res.json({ count: clientErrors.length, errors: [...clientErrors].reverse() });
+});
+
 app.use(express.static(DIST, { maxAge: '1h', index: false }));
 app.get('/{*splat}', (_req, res) => res.sendFile(path.join(DIST, 'index.html')));
 

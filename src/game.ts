@@ -8,6 +8,9 @@ import { Input } from './input';
 import { Audio } from './audio';
 import { fetchTop, submitScore } from './api';
 import { initAnalytics, track } from './analytics';
+import { detectQuality } from './quality';
+import { installErrorReporting, report } from './report';
+import { configureObstacles, buildWarmup } from './obstacles';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -45,7 +48,7 @@ export class Game {
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(50, 1, 0.1, 300);
   private car: Roadster;
-  private plume = new NitrogenPlume(1000);
+  private plume!: NitrogenPlume;
   private debris = new Debris(96);
   private world: World;
   private field: ObstacleField;
@@ -83,15 +86,53 @@ export class Game {
   private puffT = 0;
   private shake = 0;
 
+  /** Se resuelve cuando los shaders y el modelo están listos. */
+  readonly ready: Promise<void>;
+
+  private async warmup(modelUrl: string, simpleMaterials: boolean): Promise<void> {
+    const t0 = performance.now();
+    const warm = buildWarmup();
+    warm.position.set(20, 0, 0);
+    this.scene.add(warm, this.debris.mesh);
+    this.hud.setLoading('Preparando pista…');
+    const lap = (label: string) => console.info(`[warmup] ${label} ${Math.round(performance.now() - t0)} ms`);
+    try {
+      await this.renderer.compileAsync(this.scene, this.camera);
+      lap('shaders de pista');
+      this.hud.setLoading('Cargando Roadster…');
+      await loadRoadsterModel(this.car, { url: modelUrl, simpleMaterials });
+      lap('modelo cargado');
+      await this.renderer.compileAsync(this.scene, this.camera);
+      lap('shaders del coche');
+    } catch (e) {
+      report({ kind: 'model', message: (e as Error).message });
+      console.warn('No se pudo cargar el modelo del Roadster, se usa el procedural', e);
+    } finally {
+      this.scene.remove(warm);
+      this.hud.setLoading(null);
+      track('warmup_done', { ms: Math.round(performance.now() - t0) });
+    }
+  }
+
   private readonly tmpV = new THREE.Vector3();
   private readonly tmpD = new THREE.Vector3();
   private readonly tmpQ = new THREE.Quaternion();
   private readonly camTarget = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
+    const q = detectQuality();
+    installErrorReporting(canvas);
+    initAnalytics();
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.hud.flash('GPU reiniciando…', 2, true); });
+    try {
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q.profile === 'high', powerPreference: 'high-performance' });
+    } catch (e) {
+      report({ kind: 'webgl', message: 'no se pudo crear el contexto: ' + (e as Error).message });
+      showFatal('Tu navegador no pudo iniciar WebGL. Cierra esta pestaña, vuelve a abrir el juego o prueba con otro navegador.');
+      throw e;
+    }
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.maxPixelRatio));
+    this.renderer.shadowMap.enabled = q.shadows;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
@@ -99,13 +140,17 @@ export class Game {
     this.scene.environment = buildNightEnvironment(this.renderer);
     this.scene.environmentIntensity = 1.0;
 
-    this.world = new World(this.scene);
+    configureObstacles({ spots: q.vehicleSpots });
+    this.world = new World(this.scene, q);
     this.field = new ObstacleField(this.scene);
+    this.plume = new NitrogenPlume(q.particles);
     this.car = buildRoadster();
     this.car.group.position.set(0, this.y, 0);
     this.scene.add(this.car.group, this.plume.points, this.debris.mesh);
     this.world.moon.target = this.car.group;
-    loadRoadsterModel(this.car).catch((e) => console.warn('No se pudo cargar el modelo del Roadster, se usa el procedural', e));
+    // Precompila shaders de todos los obstáculos y del coche antes de jugar: en móvil la
+    // compilación en el primer frame bloquea el hilo principal varios segundos.
+    this.ready = this.warmup(q.profile === 'low' ? '/models/roadster-lite.glb' : '/models/roadster.glb', q.simpleMaterials);
 
     const input = new Input(document.body);
     input.on('flap', () => this.onFlap());
@@ -114,13 +159,13 @@ export class Game {
     this.hud.onStart(() => this.start());
     this.hud.onRetry(() => this.start());
     this.hud.onNitro(() => this.onNitro());
+    this.hud.onThrust(() => this.onFlap());
     this.hud.onSubmit((nick) => this.submit(nick));
     this.hud.onBoardRequest(() => this.loadBoard('title'));
-    initAnalytics();
     document.body.addEventListener('pointerdown', () => this.audio.unlock(), { once: false });
     window.addEventListener('keydown', () => this.audio.unlock());
 
-    if (!new URLSearchParams(location.search).has('nobloom')) {
+    if (q.bloom) {
       this.composer = new EffectComposer(this.renderer);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
       this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.45, 0.45, 0.9);
@@ -494,4 +539,11 @@ export class Game {
     this.camTarget.set(camX, lookY, 0);
     this.camera.lookAt(this.camTarget);
   }
+}
+
+function showFatal(message: string): void {
+  const el = document.getElementById('fatal');
+  if (!el) return;
+  el.querySelector('p')!.textContent = message;
+  el.hidden = false;
 }

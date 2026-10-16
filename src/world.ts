@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { NitrogenPlume } from './particles';
+import type { Quality } from './quality';
 
 /** Mapa de rugosidad con charcos: zonas lisas (mojadas) sobre asfalto. */
 function puddleRoughness(size = 256): THREE.Texture {
@@ -66,15 +67,17 @@ export class World {
   readonly moon: THREE.DirectionalLight;
   private readonly haze = new NitrogenPlume(220);
   private hazeT = 0;
+  private hazeOn = true;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, q: Quality) {
+    this.hazeOn = q.haze;
     scene.background = new THREE.Color(0x030308);
     scene.fog = new THREE.Fog(0x07070c, 28, 110);
 
     scene.add(new THREE.HemisphereLight(0x1a2236, 0x0d0405, 0.35));
     this.moon = new THREE.DirectionalLight(0xbfcde8, 1.1);
     this.moon.position.set(-6, 20, 12);
-    this.moon.castShadow = true;
+    this.moon.castShadow = q.shadows;
     this.moon.shadow.mapSize.set(1024, 1024);
     this.moon.shadow.camera.left = -14; this.moon.shadow.camera.right = 26;
     this.moon.shadow.camera.top = 16; this.moon.shadow.camera.bottom = -4;
@@ -83,9 +86,9 @@ export class World {
     scene.add(this.moon, this.moon.target);
 
     // Lavado rojo del neón: luces fijas respecto a la cámara (la pista se desplaza bajo ellas).
-    for (let i = 0; i < 6; i++) {
-      const l = new THREE.PointLight(0xff2020, 5, 13, 2);
-      l.position.set(-8 + i * 7, 0.7, i % 2 === 0 ? 4.4 : -4.4);
+    for (let i = 0; i < q.neonLights; i++) {
+      const l = new THREE.PointLight(0xff2020, q.neonLights < 6 ? 9 : 5, q.neonLights < 6 ? 18 : 13, 2);
+      l.position.set(q.neonLights < 6 ? -2 + i * 10 : -8 + i * 7, 0.7, i % 2 === 0 ? 4.4 : -4.4);
       scene.add(l);
     }
     const key = new THREE.SpotLight(0xf2f6ff, 230, 40, 0.5, 1.0, 2);
@@ -198,7 +201,7 @@ export class World {
       if (f.mesh.position.x < -40) f.mesh.position.x += f.span;
     }
     this.hazeT -= dt;
-    if (this.hazeT <= 0) {
+    if (this.hazeOn && this.hazeT <= 0) {
       this.hazeT = 0.35;
       const origin = new THREE.Vector3(10 + Math.random() * 50, 0.6 + Math.random() * 1.2, (Math.random() - 0.5) * 14);
       this.haze.emit(origin, new THREE.Vector3(0, 0.15, 0), 1, { speed: 0.6, spread: 0.3, size: 5, life: 7 });

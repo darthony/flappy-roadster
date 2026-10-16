@@ -61,6 +61,24 @@ html, body {
   font-size: 11px; font-weight: 800; letter-spacing: .25em; color: rgba(0,0,0,.6); mix-blend-mode: screen;
 }
 
+#thrust-btn {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(54px + env(safe-area-inset-bottom));
+  width: min(64vw, 300px); height: clamp(64px, 12vmin, 88px); border-radius: 999px;
+  border: 2px solid rgba(255,255,255,.55); background: rgba(255,255,255,.12); color: var(--fg);
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  font: 900 clamp(13px, 2.8vmin, 16px) var(--font); letter-spacing: .18em;
+  pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 0 24px rgba(159,216,255,.35), inset 0 0 0 1px rgba(255,255,255,.15);
+  animation: thrustpulse .9s ease-in-out infinite alternate;
+}
+#thrust-btn .rocket { font-size: 1.5em; color: var(--ice); }
+#thrust-btn:active { background: rgba(159,216,255,.4); transform: translateX(-50%) scale(.96); }
+#thrust-btn.quiet { animation: none; opacity: .45; }
+#thrust-btn.quiet .label { display: none; }
+#thrust-btn.quiet { width: clamp(64px, 12vmin, 88px); }
+@keyframes thrustpulse { from { transform: translateX(-50%) scale(1); box-shadow: 0 0 18px rgba(159,216,255,.3); } to { transform: translateX(-50%) scale(1.06); box-shadow: 0 0 36px rgba(159,216,255,.7); } }
+#nitro-ready { bottom: calc(150px + env(safe-area-inset-bottom)); }
 #nitro-btn {
   position: absolute; right: calc(18px + env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom));
   width: clamp(64px, 13vmin, 96px); height: clamp(64px, 13vmin, 96px); border-radius: 50%;
@@ -88,6 +106,8 @@ html, body {
 
 #overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(6,9,13,.45); backdrop-filter: blur(3px); transition: opacity .2s; }
 #overlay[hidden] { display: none; }
+#overlay.kb { align-items: start !important; padding: 10px 0 0 !important; overflow: auto; }
+#overlay.kb .card { max-height: none; }
 .card {
   pointer-events: auto; text-align: center; padding: 28px 32px; border-radius: 22px; max-width: min(92vw, 460px);
   background: rgba(11,15,20,.78); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 30px 80px rgba(0,0,0,.5);
@@ -106,6 +126,7 @@ html, body {
   transition: transform .1s;
 }
 .card button:active { transform: scale(.96); }
+.card button:disabled { opacity: .55; cursor: wait; font-size: 14px; letter-spacing: .08em; }
 .card h2 { margin: 14px 0 6px; font-size: 12px; letter-spacing: .3em; text-transform: uppercase; color: var(--gold); }
 .card .ghost { background: transparent; color: var(--fg); border: 1px solid rgba(255,255,255,.3); margin-left: 8px; padding: 13px 22px; }
 #score-form { display: flex; gap: 8px; justify-content: center; margin: 10px 0 4px; }
@@ -126,6 +147,8 @@ html, body {
 .board li.me { background: rgba(159,216,255,.22); outline: 1px solid #9fd8ff; }
 .board li.empty { display: block; text-align: center; opacity: .6; }
 .card { max-height: 92vh; overflow: auto; }
+#fatal { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); z-index: 10; }
+#fatal p:not(.eyebrow) { font-size: 15px; line-height: 1.5; margin: 8px 0 18px; }
 [hidden] { display: none !important; }
 
 @media (max-aspect-ratio: 1/1) {
