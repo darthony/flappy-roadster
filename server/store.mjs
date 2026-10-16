@@ -19,27 +19,32 @@ async function createPostgresStore(url) {
   const ca = process.env.DATABASE_CA_CERT?.trim();
   const ssl = wantsSsl ? (ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false }) : undefined;
   const pool = new pg.Pool({ connectionString: u.toString(), ssl, max: 5 });
+  // En Postgres 15+ el usuario de una base gestionada puede no tener permiso de CREATE en `public`
+  // (es el caso de las bases de desarrollo de App Platform). Se usa un esquema propio, del que sí es dueño.
+  const schema = process.env.DATABASE_SCHEMA ?? 'flappy';
+  await pool.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
+  const T = `${schema}.scores`;
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS scores (
+    CREATE TABLE IF NOT EXISTS ${T} (
       id BIGSERIAL PRIMARY KEY,
       nickname TEXT NOT NULL,
       score INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
-  await pool.query('CREATE INDEX IF NOT EXISTS idx_scores_score ON scores (score DESC, created_at ASC)');
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_scores_score ON ${T} (score DESC, created_at ASC)`);
   return {
     kind: 'postgres',
     label: url.replace(/\/\/[^@]*@/, '//***@'),
     async top() {
-      const { rows } = await pool.query(`SELECT nickname, score, created_at FROM scores ORDER BY score DESC, created_at ASC LIMIT ${TOP_N}`);
+      const { rows } = await pool.query(`SELECT nickname, score, created_at FROM ${T} ORDER BY score DESC, created_at ASC LIMIT ${TOP_N}`);
       return rows;
     },
     async rank(score) {
-      const { rows } = await pool.query('SELECT COUNT(*)::int + 1 AS rank FROM scores WHERE score > $1', [score]);
+      const { rows } = await pool.query(`SELECT COUNT(*)::int + 1 AS rank FROM ${T} WHERE score > $1`, [score]);
       return rows[0].rank;
     },
     async insert(nickname, score) {
-      await pool.query('INSERT INTO scores (nickname, score) VALUES ($1, $2)', [nickname, score]);
+      await pool.query(`INSERT INTO ${T} (nickname, score) VALUES ($1, $2)`, [nickname, score]);
     },
     async close() { await pool.end(); },
   };
