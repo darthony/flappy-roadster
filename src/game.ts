@@ -82,6 +82,8 @@ export class Game {
   private nitroEmitAcc = 0;
   private readyPinged = false;
 
+  /** Tras JUGAR, el coche flota hasta el primer toque (despegue). */
+  private armed = false;
   private deadTimer = 0;
   private readyT = 0;
   private readyPuffT = 0;
@@ -219,6 +221,7 @@ export class Game {
   private onFlap(): void {
     if (this.state === 'title') { this.start(); return; }
     if (this.state !== 'playing' || this.nitroActive) return;
+    if (this.armed) { this.armed = false; this.hud.flash('', 0); track('takeoff'); }
     this.vy = Math.max(this.vy, 0) * FLAP_KEEP + FLAP_V;
     this.puffCorners(16, 8);
     this.audio.flap();
@@ -258,7 +261,8 @@ export class Game {
   private start(): void {
     this.audio.unlock();
     this.state = 'playing';
-    this.y = 4.5; this.vy = 4; this.pitch = 0;
+    this.armed = true;
+    this.y = 4.5; this.vy = 0; this.pitch = 0;
     this.rolling = false; this.rollT = 0;
     this.speed = BASE_SPEED; this.passed = 0; this.score = 0;
     this.nitro = 0; this.nitroActive = false; this.nitroTimer = 0; this.nitroUses = 0; this.afterburn = 0;
@@ -272,6 +276,7 @@ export class Game {
     this.hud.hideOverlay();
     this.hud.setScore(0);
     this.hud.setNitro(0, 'charging');
+    this.hud.flash('TOCA PARA DESPEGAR', 999);
     track('game_start');
   }
 
@@ -437,6 +442,23 @@ export class Game {
   }
 
   private updatePlaying(dt: number): void {
+    if (this.armed) {
+      // En espera del primer toque: el coche flota con pequeñas ráfagas y la pista avanza despacio.
+      this.titleT += dt;
+      this.speed = THREE.MathUtils.damp(this.speed, 2.5, 3, dt);
+      this.y = 4.5 + Math.sin(this.titleT * 2.2) * 0.25;
+      this.car.group.position.y = this.y;
+      this.car.body.rotation.set(0, 0, THREE.MathUtils.damp(this.car.body.rotation.z, 0.05, 6, dt));
+      this.puffT -= dt;
+      if (this.puffT <= 0) {
+        this.puffT = 0.15;
+        this.car.group.updateMatrixWorld();
+        for (const n of this.car.cornerNozzles) this.plume.emit(this.nozzleWorld(n), this.dirWorld(0, -1, 0), 2, { speed: 4, size: 0.7, life: 0.6 });
+      }
+      this.hud.setScore(0);
+      this.hud.setNitro(0, 'charging');
+      return;
+    }
     // Velocidad: base por dificultad, multiplicada durante el nitro y decayendo después.
     const base = this.targetSpeed();
     if (this.nitroActive) this.speed = THREE.MathUtils.damp(this.speed, base * NITRO_SPEED_MULT, 6, dt);

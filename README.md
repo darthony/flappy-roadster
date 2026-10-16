@@ -73,6 +73,8 @@ Con `DEBUG_DB=1` expone `/api/dbinfo` con el diagnóstico de permisos.
   (`roadster-lite.glb`, 74 k triángulos) y materiales simplificados. Se fuerza con `?quality=high|low`.
 - Al arrancar se precompilan los shaders de todos los obstáculos y del coche (`renderer.compileAsync`); hasta entonces el
   botón JUGAR muestra el progreso. Sin esto, en GPUs móviles el primer frame bloqueaba el hilo principal varios segundos.
+- Tras JUGAR el coche flota hasta el primer toque ("TOCA PARA DESPEGAR"): sin esto caía al suelo en menos de un segundo
+  antes de que el jugador reaccionara, sobre todo en móvil.
 - En móvil aparece un botón de impulso abajo al centro (la pantalla completa sigue respondiendo al toque) y la tarjeta de
   nickname se recoloca sobre el teclado usando `visualViewport`.
 

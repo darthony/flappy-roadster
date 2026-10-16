@@ -139,6 +139,7 @@ export class Hud {
 
   /** Muestra un texto de bonificación durante `seconds`. */
   flash(text: string, seconds = 0.9, nitro = false): void {
+    if (!text) { this.mult.classList.remove('show', 'nitro'); this.multTimer = 0; return; }
     this.mult.textContent = text;
     this.mult.classList.add('show');
     this.mult.classList.toggle('nitro', nitro);
