@@ -69,7 +69,10 @@ Con `DEBUG_DB=1` expone `/api/dbinfo` con el diagnóstico de permisos.
 - `src/report.ts` captura excepciones, promesas rechazadas, pérdida del contexto WebGL y errores de shader de Three,
   y los envía a `POST /api/client-errors` (quedan en los logs del servicio, `doctl apps logs <app> web --type run`)
   y a Analytics como evento `exception`. Los últimos 200 se consultan en `GET /api/client-errors?key=ADMIN_KEY`.
-- `src/quality.ts` elige perfil `low` en móvil: sin sombras ni bloom, menos luces, DPR máximo 1,5, modelo ligero
+- `src/quality.ts` elige perfil `low` en móvil, en GPUs por software o integradas antiguas (nombre vía `WEBGL_debug_renderer_info`)
+  y en equipos donde una visita anterior tardó demasiado en preparar shaders (se recuerda en `localStorage`). Si en perfil alto la
+  pista tarda más de 3 s en compilar, se recarga en ligero; si la preparación total pasa de 7 s, la próxima visita arranca en ligero.
+  También elige `low` sin sombras ni bloom, menos luces, DPR máximo 1,5, modelo ligero
   (`roadster-lite.glb`, 74 k triángulos) y materiales simplificados. Se fuerza con `?quality=high|low`.
 - Al arrancar se precompilan los shaders de todos los obstáculos y del coche (`renderer.compileAsync`); hasta entonces el
   botón JUGAR muestra el progreso. Sin esto, en GPUs móviles el primer frame bloqueaba el hilo principal varios segundos.

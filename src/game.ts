@@ -8,7 +8,7 @@ import { Input } from './input';
 import { Audio } from './audio';
 import { fetchTop, submitScore } from './api';
 import { initAnalytics, track } from './analytics';
-import { detectQuality } from './quality';
+import { detectQuality, rememberQuality } from './quality';
 import { installErrorReporting, report } from './report';
 import { configureObstacles, buildWarmup } from './obstacles';
 import { blobShadow, glowSprite } from './glow';
@@ -46,6 +46,7 @@ export class Game {
   private renderer: THREE.WebGLRenderer;
   private shadow?: THREE.Mesh;
   private adaptiveBloom = false;
+  private highProfile = false;
   private fpsSamples: number[] = [];
   private fpsAcc = 0;
   private fpsFrames = 0;
@@ -107,6 +108,17 @@ export class Game {
     try {
       await this.renderer.compileAsync(this.scene, this.camera);
       lap('shaders de pista');
+      // Si solo la pista ya tardó demasiado en perfil alto, esta GPU no lo aguanta:
+      // se recuerda el perfil ligero y se recarga antes de compilar el coche completo.
+      const trackMs = performance.now() - t0;
+      if (this.highProfile && trackMs > 3000) {
+        rememberQuality('low');
+        report({ kind: 'perf', message: `perfil alto demasiado lento (${Math.round(trackMs)} ms en pista), cambiando a ligero`, extra: { trackMs: Math.round(trackMs) } });
+        track('quality_downgrade', { track_ms: Math.round(trackMs) });
+        this.hud.setLoading('Ajustando calidad…');
+        setTimeout(() => location.reload(), 300);
+        return;
+      }
       this.hud.setLoading('Cargando Roadster…');
       await loadRoadsterModel(this.car, { url: modelUrl, simpleMaterials });
       lap('modelo cargado');
@@ -120,7 +132,9 @@ export class Game {
       this.hud.setLoading(null);
       const ms = Math.round(performance.now() - t0);
       track('warmup_done', { ms });
-      if (ms > 1500) report({ kind: 'perf', message: `warmup ${ms} ms`, extra: { ms } });
+      if (ms > 1500) report({ kind: 'perf', message: `warmup ${ms} ms`, extra: { ms, profile: this.highProfile ? 'high' : 'low' } });
+      // Preparación total lenta en perfil alto: la próxima visita arranca directamente en ligero.
+      if (this.highProfile && ms > 7000) { rememberQuality('low'); track('quality_downgrade', { warmup_ms: ms }); }
     }
   }
 
@@ -168,6 +182,11 @@ export class Game {
     this.world.moon.target = this.car.group;
     // Precompila shaders de todos los obstáculos y del coche antes de jugar: en móvil la
     // compilación en el primer frame bloquea el hilo principal varios segundos.
+    this.highProfile = q.profile === 'high';
+    document.body.dataset.quality = q.profile;
+    document.body.dataset.gpu = q.gpu;
+    document.body.dataset.qualityReason = q.reason;
+    track('quality', { profile: q.profile, reason: q.reason, gpu: q.gpu.slice(0, 60) });
     this.ready = this.warmup(q.profile === 'low' ? '/models/roadster-lite.glb' : '/models/roadster.glb', q.simpleMaterials);
 
     const input = new Input(document.body);
