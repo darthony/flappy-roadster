@@ -46,7 +46,7 @@ export class Game {
   private renderer: THREE.WebGLRenderer;
   private shadow?: THREE.Mesh;
   private adaptiveBloom = false;
-  private highProfile = false;
+  private tier: 'ultra' | 'low' | 'high' = 'high';
   private fpsSamples: number[] = [];
   private fpsAcc = 0;
   private fpsFrames = 0;
@@ -98,7 +98,7 @@ export class Game {
   /** Se resuelve cuando los shaders y el modelo están listos. */
   readonly ready: Promise<void>;
 
-  private async warmup(modelUrl: string, simpleMaterials: boolean): Promise<void> {
+  private async warmup(modelUrl: string | null, simpleMaterials: boolean): Promise<void> {
     const t0 = performance.now();
     const warm = buildWarmup();
     warm.position.set(20, 0, 0);
@@ -111,19 +111,22 @@ export class Game {
       // Si solo la pista ya tardó demasiado en perfil alto, esta GPU no lo aguanta:
       // se recuerda el perfil ligero y se recarga antes de compilar el coche completo.
       const trackMs = performance.now() - t0;
-      if (this.highProfile && trackMs > 3000) {
-        rememberQuality('low');
-        report({ kind: 'perf', message: `perfil alto demasiado lento (${Math.round(trackMs)} ms en pista), cambiando a ligero`, extra: { trackMs: Math.round(trackMs) } });
-        track('quality_downgrade', { track_ms: Math.round(trackMs) });
+      const next = this.tier === 'high' && trackMs > 3000 ? 'low' : this.tier === 'low' && trackMs > 4000 ? 'ultra' : null;
+      if (next) {
+        rememberQuality(next);
+        report({ kind: 'perf', message: `perfil ${this.tier} demasiado lento (${Math.round(trackMs)} ms en pista), cambiando a ${next}`, extra: { trackMs: Math.round(trackMs), from: this.tier, to: next } });
+        track('quality_downgrade', { track_ms: Math.round(trackMs), from: this.tier, to: next });
         this.hud.setLoading('Ajustando calidad…');
         setTimeout(() => location.reload(), 300);
         return;
       }
-      this.hud.setLoading('Cargando Roadster…');
-      await loadRoadsterModel(this.car, { url: modelUrl, simpleMaterials });
-      lap('modelo cargado');
-      await this.renderer.compileAsync(this.scene, this.camera);
-      lap('shaders del coche');
+      if (modelUrl) {
+        this.hud.setLoading('Cargando Roadster…');
+        await loadRoadsterModel(this.car, { url: modelUrl, simpleMaterials });
+        lap('modelo cargado');
+        await this.renderer.compileAsync(this.scene, this.camera);
+        lap('shaders del coche');
+      }
     } catch (e) {
       report({ kind: 'model', message: (e as Error).message });
       console.warn('No se pudo cargar el modelo del Roadster, se usa el procedural', e);
@@ -132,9 +135,10 @@ export class Game {
       this.hud.setLoading(null);
       const ms = Math.round(performance.now() - t0);
       track('warmup_done', { ms });
-      if (ms > 1500) report({ kind: 'perf', message: `warmup ${ms} ms`, extra: { ms, profile: this.highProfile ? 'high' : 'low' } });
-      // Preparación total lenta en perfil alto: la próxima visita arranca directamente en ligero.
-      if (this.highProfile && ms > 7000) { rememberQuality('low'); track('quality_downgrade', { warmup_ms: ms }); }
+      if (ms > 1500) report({ kind: 'perf', message: `warmup ${ms} ms`, extra: { ms, profile: this.tier } });
+      // Preparación total lenta: la próxima visita arranca un nivel más abajo.
+      if (this.tier === 'high' && ms > 7000) { rememberQuality('low'); track('quality_downgrade', { warmup_ms: ms, to: 'low' }); }
+      if (this.tier === 'low' && ms > 6000) { rememberQuality('ultra'); track('quality_downgrade', { warmup_ms: ms, to: 'ultra' }); }
     }
   }
 
@@ -182,12 +186,12 @@ export class Game {
     this.world.moon.target = this.car.group;
     // Precompila shaders de todos los obstáculos y del coche antes de jugar: en móvil la
     // compilación en el primer frame bloquea el hilo principal varios segundos.
-    this.highProfile = q.profile === 'high';
-    document.body.dataset.quality = q.profile;
+    this.tier = q.tier;
+    document.body.dataset.quality = q.tier;
     document.body.dataset.gpu = q.gpu;
     document.body.dataset.qualityReason = q.reason;
-    track('quality', { profile: q.profile, reason: q.reason, gpu: q.gpu.slice(0, 60) });
-    this.ready = this.warmup(q.profile === 'low' ? '/models/roadster-lite.glb' : '/models/roadster.glb', q.simpleMaterials);
+    track('quality', { profile: q.tier, reason: q.reason, gpu: q.gpu.slice(0, 60) });
+    this.ready = this.warmup(q.useModel ? (q.profile === 'low' ? '/models/roadster-lite.glb' : '/models/roadster.glb') : null, q.simpleMaterials);
 
     const input = new Input(document.body);
     input.on('flap', () => this.onFlap());
@@ -595,7 +599,9 @@ export class Game {
     this.adaptiveBloom = false;
     const avg = this.fpsSamples.reduce((a, b) => a + b, 0) / this.fpsSamples.length;
     track('mobile_fps', { fps: Math.round(avg) });
-    report({ kind: 'perf', message: `${Math.round(avg)} fps en perfil low`, extra: { fps: Math.round(avg), samples: this.fpsSamples.map(Math.round) } });
+    report({ kind: 'perf', message: `${Math.round(avg)} fps en perfil ${this.tier}`, extra: { fps: Math.round(avg), samples: this.fpsSamples.map(Math.round) } });
+    // Si ni el perfil ligero llega a 40 fps, la próxima visita usa ultra ligero.
+    if (this.tier === 'low' && avg < 40) { rememberQuality('ultra'); track('quality_downgrade', { fps: Math.round(avg), to: 'ultra' }); }
     if (avg >= 52) {
       this.composer = new EffectComposer(this.renderer);
       this.composer.addPass(new RenderPass(this.scene, this.camera));

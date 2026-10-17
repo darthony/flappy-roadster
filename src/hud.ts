@@ -125,12 +125,21 @@ export class Hud {
     this.score.classList.add('pop');
   }
 
+  private lastSpeed = -1;
   setSpeed(mph: number): void {
-    this.speed.textContent = String(Math.round(mph));
+    const v = Math.round(mph);
+    if (v === this.lastSpeed) return;
+    this.lastSpeed = v;
+    this.speed.textContent = String(v);
   }
 
+  private lastFill = -1;
+  private lastNitroState: NitroState | '' = '';
   setNitro(fill: number, state: NitroState): void {
-    this.nitroFill.style.width = `${Math.round(Math.min(1, Math.max(0, fill)) * 100)}%`;
+    const pct = Math.round(Math.min(1, Math.max(0, fill)) * 100);
+    if (pct === this.lastFill && state === this.lastNitroState) return;
+    this.lastFill = pct; this.lastNitroState = state;
+    this.nitroFill.style.width = `${pct}%`;
     this.nitro.classList.toggle('ready', state === 'ready');
     this.nitro.classList.toggle('active', state === 'active');
     this.nitroBtn.classList.toggle('ready', state === 'ready');

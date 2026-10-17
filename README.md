@@ -72,6 +72,9 @@ Con `DEBUG_DB=1` expone `/api/dbinfo` con el diagnóstico de permisos.
 - `src/quality.ts` elige perfil `low` en móvil, en GPUs por software o integradas antiguas (nombre vía `WEBGL_debug_renderer_info`)
   y en equipos donde una visita anterior tardó demasiado en preparar shaders (se recuerda en `localStorage`). Si en perfil alto la
   pista tarda más de 3 s en compilar, se recarga en ligero; si la preparación total pasa de 7 s, la próxima visita arranca en ligero.
+  Hay un tercer nivel `ultra` (iPhone 8 y similares: iOS 16 o menos, pantallas de 375x667, 2 GB de memoria): coche procedural
+  sin descargar el modelo, 220 partículas, resolución nativa 1x y una sola luz de neón. Se llega a él automáticamente si el
+  perfil ligero tarda más de 4 s en compilar la pista, más de 6 s en total, o no alcanza 40 fps. Se fuerza con `?quality=ultra`.
   También elige `low` sin sombras ni bloom, menos luces, DPR máximo 1,5, modelo ligero
   (`roadster-lite.glb`, 74 k triángulos) y materiales simplificados. Se fuerza con `?quality=high|low`.
 - Al arrancar se precompilan los shaders de todos los obstáculos y del coche (`renderer.compileAsync`); hasta entonces el
