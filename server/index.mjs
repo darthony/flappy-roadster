@@ -76,10 +76,26 @@ app.post('/api/client-errors', express.text({ type: '*/*', limit: '8kb' }), (req
   console.error(`[client-error] ${entry.kind}: ${entry.message} | ${entry.ua} | ${entry.viewport}`);
   res.status(204).end();
 });
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function deviceOf(ua) {
+  if (/iPhone/.test(ua)) return 'iPhone' + (ua.match(/OS (\d+)_/)?.[1] ? ' iOS ' + ua.match(/OS (\d+)_/)[1] : '') + (/CriOS/.test(ua) ? ' Chrome' : ' Safari');
+  if (/Android/.test(ua)) return 'Android ' + (ua.match(/Android \d+; ([^;)]+)/)?.[1]?.trim().slice(0, 18) ?? '') + (/wv\)/.test(ua) ? ' (webview)' : '');
+  if (/Macintosh/.test(ua)) return 'Mac ' + (/Chrome/.test(ua) ? 'Chrome' : 'Safari');
+  if (/Windows/.test(ua)) return 'Windows ' + (/Edg\//.test(ua) ? 'Edge' : /Firefox/.test(ua) ? 'Firefox' : 'Chrome');
+  if (/X11|Linux/.test(ua)) return 'Linux';
+  return 'otro';
+}
 app.get('/api/client-errors', (req, res) => {
   if (!process.env.ADMIN_KEY || req.query.key !== process.env.ADMIN_KEY) return res.status(404).end();
   res.set('Cache-Control', 'no-store');
-  res.json({ count: clientErrors.length, errors: [...clientErrors].reverse() });
+  const list = [...clientErrors].reverse();
+  if (req.query.format === 'json' || !/text\/html/.test(req.get('accept') ?? '')) return res.json({ count: list.length, errors: list });
+  // Vista legible para abrir desde el móvil.
+  const rows = list.map((e) => `<tr class="${esc(e.kind)}"><td>${esc(e.at.slice(11, 19))}</td><td>${esc(e.kind)}</td><td>${esc(deviceOf(e.ua))}<br><small>${esc(e.viewport)}</small></td><td>${esc(e.message)}${e.extra ? `<br><small>${esc(JSON.stringify(e.extra))}</small>` : ''}${e.stack ? `<details><summary>stack</summary><pre>${esc(e.stack)}</pre></details>` : ''}</td></tr>`).join('');
+  res.type('html').send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Flappy Roadster · reportes</title>
+<style>body{font:14px system-ui;margin:12px;background:#0b0f14;color:#eee}table{border-collapse:collapse;width:100%}td{border-top:1px solid #333;padding:6px 4px;vertical-align:top;word-break:break-word}tr.perf td:nth-child(2){color:#9fd8ff}tr.webgl td:nth-child(2),tr.three td:nth-child(2),tr.error td:nth-child(2),tr.rejection td:nth-child(2){color:#ff6b6b}small{opacity:.6}pre{white-space:pre-wrap;font-size:11px}h1{font-size:18px}</style>
+<h1>Reportes de clientes (${list.length}, desde el último despliegue; hora UTC)</h1><p><small>perf = rendimiento (fps, tiempo de preparación). webgl/three/error = fallos. <a href="?key=${esc(req.query.key)}&format=json" style="color:#9fd8ff">JSON</a></small></p>
+<table>${rows}</table>`);
 });
 
 app.use(express.static(DIST, { maxAge: '1h', index: false }));
